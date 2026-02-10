@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using UrbanaKey.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using UrbanaKey.Infrastructure.Persistence;
 namespace UrbanaKey.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(UrbanaKeyDbContext))]
-    partial class UrbanaKeyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260210083015_AddFinanceAndAssemblyRefinements")]
+    partial class AddFinanceAndAssemblyRefinements
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

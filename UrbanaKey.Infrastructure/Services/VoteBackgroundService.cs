@@ -1,5 +1,9 @@
+using Microsoft.AspNetCore.SignalR;
+using UrbanaKey.Infrastructure.Hubs;
+using MediatR;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,21 +35,32 @@ public class VoteBackgroundService : BackgroundService
     {
         var batch = new List<VoteDto>();
         
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-             while (_voteChannel.Reader.TryRead(out var vote))
-             {
-                 batch.Add(vote);
-                 if (batch.Count >= BatchSize) break;
-             }
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                 while (_voteChannel.Reader.TryRead(out var vote))
+                 {
+                     batch.Add(vote);
+                     if (batch.Count >= BatchSize) break;
+                 }
 
-             if (batch.Count > 0)
-             {
-                 await ProcessBatchAsync(batch, stoppingToken);
-                 batch.Clear();
-             }
+                 if (batch.Count > 0)
+                 {
+                     await ProcessBatchAsync(batch, stoppingToken);
+                     batch.Clear();
+                 }
 
-             await Task.Delay(100, stoppingToken);
+                 await Task.Delay(100, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("VoteBackgroundService is shutting down gracefully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred in VoteBackgroundService.");
         }
     }
 
@@ -53,6 +68,8 @@ public class VoteBackgroundService : BackgroundService
     {
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<UrbanaKeyDbContext>();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<AssemblyHub>>();
         
         var votes = new List<Vote>();
         foreach (var dto in voteDtos)
@@ -72,5 +89,14 @@ public class VoteBackgroundService : BackgroundService
         dbContext.Votes.AddRange(votes);
         await dbContext.SaveChangesAsync(cancellationToken);
         _logger.LogInformation($"Processed {votes.Count} votes.");
+
+        // Notificar quórum por cada asamblea afectada en el lote
+        var assemblyIds = voteDtos.Select(v => v.AssemblyId).Distinct();
+        foreach (var assemblyId in assemblyIds)
+        {
+            var quorum = await mediator.Send(new GetQuorumQuery(assemblyId), cancellationToken);
+            await hubContext.Clients.Group(assemblyId.ToString())
+                .SendAsync("UpdateQuorum", quorum, cancellationToken);
+        }
     }
 }
