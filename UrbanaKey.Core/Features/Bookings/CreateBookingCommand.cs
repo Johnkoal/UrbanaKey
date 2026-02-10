@@ -34,7 +34,17 @@ public class CreateBookingHandler(IApplicationDbContext db, ITenantProvider tena
         {
             return null;
         }
-        // 3. Verificar disponibilidad (no traslapes)
+
+        // 3. Verificación de Cartera: Buscar facturas pendientes de pago
+        var hasDebt = await db.Invoices
+            .AnyAsync(i => i.UnitId == command.Request.UnitId && !i.IsPaid && i.DueDate < DateTime.UtcNow, ct);
+
+        if (hasDebt)
+        {
+            return null; // Denegar por morosidad
+        }
+
+        // 4. Verificar disponibilidad (no traslapes)
         var hasConflict = await db.AmenityBookings.AnyAsync(b => 
             b.CommonAreaId == command.Request.CommonAreaId &&
             b.Status == "Reserved" &&
@@ -45,7 +55,7 @@ public class CreateBookingHandler(IApplicationDbContext db, ITenantProvider tena
 
         if (hasConflict) return null;
 
-        // 4. Crear reserva
+        // 5. Crear reserva
         var booking = new AmenityBooking
         {
             Id = Guid.NewGuid(),

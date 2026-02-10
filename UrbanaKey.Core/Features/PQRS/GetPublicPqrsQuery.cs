@@ -18,7 +18,7 @@ public class GetPublicPqrsHandler(IApplicationDbContext db) : IRequestHandler<Ge
         return await db.PQRS
             .Where(x => x.IsPublic)
             .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new PqrResponse(x.Id, x.Title, x.Description, x.Status, x.CreatedAt, x.IsPublic, x.AttachmentUrl))
+            .Select(x => new PqrResponse(x.Id, x.Title, x.Description, x.Status, x.CreatedAt, x.IsPublic, x.AttachmentUrl, x.AttachmentUrls))
             .ToListAsync(ct);
     }
 }

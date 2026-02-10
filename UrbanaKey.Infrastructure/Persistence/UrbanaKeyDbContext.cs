@@ -37,6 +37,9 @@ public class UrbanaKeyDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
     public DbSet<EmergencyAlert> EmergencyAlerts { get; set; }
     public DbSet<CommonArea> CommonAreas { get; set; }
     public DbSet<AmenityBooking> AmenityBookings { get; set; }
+    public DbSet<PqrComment> PqrComments { get; set; }
+    public DbSet<Invoice> Invoices { get; set; }
+    public DbSet<Payment> Payments { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -62,6 +65,9 @@ public class UrbanaKeyDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
         builder.Entity<EmergencyAlert>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
         builder.Entity<CommonArea>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
         builder.Entity<AmenityBooking>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<PqrComment>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<Invoice>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<Payment>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
 
         builder.Entity<Tenant>()
             .HasIndex(t => t.Subdomain)

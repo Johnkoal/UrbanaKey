@@ -12,5 +12,6 @@ public class PQRS : ITenantEntity {
     public string Status { get; set; } = "Open"; // Open, InProgress, Closed
     public bool IsPublic { get; set; } = false;
     public string? AttachmentUrl { get; set; }
+    public List<string> AttachmentUrls { get; set; } = new();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

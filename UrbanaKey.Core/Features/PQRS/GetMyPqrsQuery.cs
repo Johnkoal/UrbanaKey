@@ -18,7 +18,7 @@ public class GetMyPqrsHandler(IApplicationDbContext db) : IRequestHandler<GetMyP
         return await db.PQRS
             .Where(x => x.CreatedBy == request.UserId)
             .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new PqrResponse(x.Id, x.Title, x.Description, x.Status, x.CreatedAt, x.IsPublic, x.AttachmentUrl))
+            .Select(x => new PqrResponse(x.Id, x.Title, x.Description, x.Status, x.CreatedAt, x.IsPublic, x.AttachmentUrl, x.AttachmentUrls))
             .ToListAsync(ct);
     }
 }

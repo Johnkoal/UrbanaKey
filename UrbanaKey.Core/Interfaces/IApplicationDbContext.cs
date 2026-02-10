@@ -14,5 +14,9 @@ public interface IApplicationDbContext
     DbSet<Sanction> Sanctions { get; }
     DbSet<CommonArea> CommonAreas { get; }
     DbSet<AmenityBooking> AmenityBookings { get; }
+    DbSet<PqrComment> PqrComments { get; }
+    DbSet<Invoice> Invoices { get; }
+    DbSet<Payment> Payments { get; }
+    DbSet<AuditLog> AuditLogs { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

@@ -8,9 +8,6 @@ using System.Threading.Tasks;
 namespace UrbanaKey.Core.Features.PQRS;
 
 using Microsoft.AspNetCore.Identity;
-using System.Collections.Generic;
-using UrbanaKey.Core.Interfaces;
-
 public record CreatePqrCommand(CreatePqrRequest Request, Guid UserId) : IRequest<Guid>;
 
 public class CreatePqrHandler(
@@ -18,11 +15,28 @@ public class CreatePqrHandler(
     ITenantProvider tenantProvider, 
     IEmailQueue emailQueue,
     ITemplateService templateService,
+    IFileStorage fileStorage,
     UserManager<User> userManager) 
     : IRequestHandler<CreatePqrCommand, Guid>
 {
     public async Task<Guid> Handle(CreatePqrCommand command, CancellationToken ct)
     {
+        var attachmentUrls = new List<string>();
+
+        if (command.Request.Attachments != null)
+        {
+            foreach (var stream in command.Request.Attachments)
+            {
+                var fileName = $"pqrs/{Guid.NewGuid()}.jpg"; 
+                var url = await fileStorage.UploadFileAsync(stream, fileName, "pqrs", tenantProvider.GetTenantId()); 
+                attachmentUrls.Add(url);
+            }
+        }
+        else if (!string.IsNullOrEmpty(command.Request.AttachmentUrl))
+        {
+            attachmentUrls.Add(command.Request.AttachmentUrl);
+        }
+
         var pqr = new Domain.PQRS
         {
             Id = Guid.NewGuid(),
@@ -32,7 +46,8 @@ public class CreatePqrHandler(
             Title = command.Request.Title,
             Description = command.Request.Description,
             IsPublic = command.Request.IsPublic,
-            AttachmentUrl = command.Request.AttachmentUrl,
+            AttachmentUrls = attachmentUrls,
+            AttachmentUrl = attachmentUrls.FirstOrDefault(),
             Status = "Open",
             CreatedAt = DateTime.UtcNow
         };

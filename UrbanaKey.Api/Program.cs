@@ -6,7 +6,9 @@ using UrbanaKey.Core.Features.Units;
 using UrbanaKey.Core.Features.Residents;
 using UrbanaKey.Core.Features.Sanctions;
 using UrbanaKey.Core.Features.Bookings;
+using UrbanaKey.Core.Features.Amenities;
 using UrbanaKey.Core.Features.Assemblies; // For VoteDto, CastVoteCommand
+using UrbanaKey.Core.Features.Finance;
 using UrbanaKey.Core.Interfaces;
 using UrbanaKey.Infrastructure.Persistence;
 using UrbanaKey.Infrastructure.Services;
@@ -39,7 +41,9 @@ builder.Services.AddScoped<IApplicationDbContext>(provider => provider.GetRequir
 // Identity
 builder.Services.AddAuthorization(options => 
 {
-    options.AddPolicy(UserRoles.Admin, policy => policy.RequireRole(UserRoles.Admin));
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole(UserRoles.Admin));
+    options.AddPolicy("ResidentOnly", policy => policy.RequireRole(UserRoles.Resident));
+    options.AddPolicy("StaffOnly", policy => policy.RequireRole(UserRoles.Admin, UserRoles.Guard));
 });
 builder.Services.AddAuthentication().AddCookie(IdentityConstants.ApplicationScheme);
 
@@ -165,6 +169,18 @@ unitsGroup.MapPost("/", async (IMediator mediator, CreateUnitRequest request) =>
     return Results.Created($"/api/units/{id}", new { Id = id });
 });
 
+unitsGroup.MapPut("/{id}", async (Guid id, UpdateUnitRequest request, IMediator mediator) => 
+{
+    var result = await mediator.Send(new UpdateUnitCommand(id, request));
+    return result ? Results.NoContent() : Results.NotFound();
+});
+
+unitsGroup.MapDelete("/{id}", async (Guid id, IMediator mediator) => 
+{
+    var result = await mediator.Send(new DeleteUnitCommand(id));
+    return result ? Results.NoContent() : Results.BadRequest("No se puede eliminar la unidad (verifique si hay residentes vinculados).");
+});
+
 unitsGroup.MapPost("/import", async (IMediator mediator, IFormFile file) => 
 {
     if (file == null || file.Length == 0)
@@ -176,13 +192,20 @@ unitsGroup.MapPost("/import", async (IMediator mediator, IFormFile file) =>
 }).DisableAntiforgery();
 
 // Resident Management Group
-app.MapGroup("/api/admin/residents")
+var residentsGroup = app.MapGroup("/api/admin/residents")
     .RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin))
-    .WithTags("Residents")
-    .MapPost("/link", async (IMediator mediator, LinkResidentRequest request) => 
+    .WithTags("Residents");
+
+residentsGroup.MapPost("/link", async (IMediator mediator, LinkResidentRequest request) => 
     {
         var id = await mediator.Send(new LinkResidentCommand(request));
         return Results.Ok(new { ProfileId = id });
+    });
+
+residentsGroup.MapDelete("/{profileId}", async (Guid profileId, IMediator mediator) => 
+    {
+        var result = await mediator.Send(new UnlinkResidentCommand(profileId));
+        return result ? Results.NoContent() : Results.NotFound();
     });
 
 // Sanctions Group
@@ -206,6 +229,33 @@ app.MapGroup("/api/assemblies")
         return Results.Accepted();
     });
 
+var amenitiesGroup = app.MapGroup("/api/amenities")
+    .RequireAuthorization()
+    .WithTags("Amenities");
+
+amenitiesGroup.MapPost("/", async (CreateCommonAreaRequest request, IMediator mediator) => 
+    {
+        var id = await mediator.Send(new CreateCommonAreaCommand(request));
+        return Results.Created($"/api/amenities/{id}", new { Id = id });
+    });
+
+amenitiesGroup.MapPut("/{id}", async (Guid id, CreateCommonAreaRequest request, bool isActive, IMediator mediator) => 
+    {
+        var result = await mediator.Send(new UpdateCommonAreaCommand(id, request, isActive));
+        return result ? Results.NoContent() : Results.NotFound();
+    })
+    .RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin));
+
+// Endpoint de Cancelación
+app.MapDelete("/api/amenities/bookings/{id}", async (Guid id, IMediator mediator, ClaimsPrincipal user) => 
+{
+    var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var isAdmin = user.IsInRole(UserRoles.Admin);
+    
+    var result = await mediator.Send(new CancelBookingCommand(id, userId, isAdmin));
+    return result ? Results.NoContent() : Results.BadRequest("No se pudo cancelar la reserva.");
+});
+
 // Admin Group
 app.MapGroup("/api/admin")
     .RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin))
@@ -228,6 +278,23 @@ app.MapGroup("/api/admin/users")
             .ToListAsync();
     });
 
+// Admin Reports Group
+app.MapGroup("/api/admin/reports")
+    .RequireAuthorization("AdminOnly")
+    .WithTags("Admin Reports")
+    .MapGet("/audit-logs", async (IMediator mediator) => 
+        Results.Ok(await mediator.Send(new GetAuditLogsQuery())));
+
+// Finance Group
+app.MapGroup("/api/admin/finance")
+    .RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin))
+    .WithTags("Finance")
+    .MapPost("/generate-invoices", async (decimal standardFee, IMediator mediator) => 
+    {
+        var count = await mediator.Send(new GenerateMonthlyInvoicesCommand(standardFee));
+        return Results.Ok(new { InvoicesGenerated = count });
+    });
+
 // PQR Group
 var pqrGroup = app.MapGroup("/api/pqr")
     .RequireAuthorization()
@@ -248,28 +315,33 @@ pqrGroup.MapGet("/public", async (IMediator mediator) =>
 pqrGroup.MapPost("/", async (
     IMediator mediator, 
     ClaimsPrincipal user, 
-    ITenantProvider tenantProvider,
-    IFileStorage fileStorage,
-    [FromForm] string title, 
-    [FromForm] string description, 
-    [FromForm] Guid unitId, 
-    [FromForm] bool isPublic,
-    IFormFile? file
+    HttpRequest request
     ) => 
 {
     var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    string? attachmentUrl = null;
+    var form = await request.ReadFormAsync();
+    
+    var attachments = form.Files.Select(f => f.OpenReadStream()).ToList();
+    
+    var pqrRequest = new CreatePqrRequest(
+        form["title"]!, 
+        form["description"]!, 
+        Guid.Parse(form["unitId"]!), 
+        bool.Parse(form["isPublic"]!),
+        null, // attachmentUrl
+        attachments);
 
-    if (file != null)
-    {
-        using var stream = file.OpenReadStream();
-        attachmentUrl = await fileStorage.UploadFileAsync(stream, file.FileName, "pqr", tenantProvider.GetTenantId());
-    }
-
-    var request = new CreatePqrRequest(title, description, unitId, isPublic, attachmentUrl);
-    var id = await mediator.Send(new CreatePqrCommand(request, userId));
+    var id = await mediator.Send(new CreatePqrCommand(pqrRequest, userId));
     return Results.Created($"/api/pqr/{id}", new { Id = id });
 }).DisableAntiforgery(); // For file upload handling
+
+// Nuevo endpoint para comentarios
+pqrGroup.MapPost("/{id}/comments", async (Guid id, AddPqrCommentRequest request, IMediator mediator, ClaimsPrincipal user) => 
+{
+    var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var commentId = await mediator.Send(new AddPqrCommentCommand(request with { PqrId = id }, userId));
+    return Results.Ok(new { Id = commentId });
+});
 
 // Admin PQR Group
 var adminPqrGroup = app.MapGroup("/api/admin/pqr")
