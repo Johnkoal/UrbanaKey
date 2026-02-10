@@ -9,7 +9,7 @@ namespace UrbanaKey.Core.Features.PQRS;
 
 public record CreatePqrCommand(CreatePqrRequest Request, Guid UserId) : IRequest<Guid>;
 
-public class CreatePqrHandler(IApplicationDbContext db, ITenantProvider tenantProvider) 
+public class CreatePqrHandler(IApplicationDbContext db, ITenantProvider tenantProvider, IEmailService emailService) 
     : IRequestHandler<CreatePqrCommand, Guid>
 {
     public async Task<Guid> Handle(CreatePqrCommand command, CancellationToken ct)
@@ -23,12 +23,21 @@ public class CreatePqrHandler(IApplicationDbContext db, ITenantProvider tenantPr
             Title = command.Request.Title,
             Description = command.Request.Description,
             IsPublic = command.Request.IsPublic,
+            AttachmentUrl = command.Request.AttachmentUrl,
             Status = "Open",
             CreatedAt = DateTime.UtcNow
         };
 
         db.PQRS.Add(pqr);
         await db.SaveChangesAsync(ct);
+
+        // Notify Admin (or designated contact)
+        await emailService.SendEmailAsync(new EmailMessage(
+            "admin@urbanakey.com", 
+            $"New PQR: {pqr.Title}", 
+            $"A new PQR has been created by user {command.UserId}."
+        ));
+
         return pqr.Id;
     }
 }

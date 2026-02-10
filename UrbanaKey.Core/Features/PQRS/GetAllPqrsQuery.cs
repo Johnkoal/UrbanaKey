@@ -16,7 +16,7 @@ public class GetAllPqrsHandler(IApplicationDbContext db) : IRequestHandler<GetAl
         // Global Query Filter handles filtering by current Tenant automatically
         return await db.PQRS
             .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new PqrResponse(x.Id, x.Title, x.Description, x.Status, x.CreatedAt, x.IsPublic))
+            .Select(x => new PqrResponse(x.Id, x.Title, x.Description, x.Status, x.CreatedAt, x.IsPublic, x.AttachmentUrl))
             .ToListAsync(ct);
     }
 }

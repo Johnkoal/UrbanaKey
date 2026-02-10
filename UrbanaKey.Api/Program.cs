@@ -12,7 +12,11 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Mvc; 
 using UrbanaKey.Core.Features.PQRS;
-using UrbanaKey.Core.Interfaces; 
+using UrbanaKey.Core.Features.Admin;
+using UrbanaKey.Core.Common;
+using UrbanaKey.Core.Interfaces;   
+using FluentValidation;
+using UrbanaKey.Api.Validators; 
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,7 +33,11 @@ builder.Services.AddDbContextPool<UrbanaKeyDbContext>(options =>
 builder.Services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<UrbanaKeyDbContext>());
 
 // Identity
-builder.Services.AddAuthorization();
+// Identity
+builder.Services.AddAuthorization(options => 
+{
+    options.AddPolicy(UserRoles.Admin, policy => policy.RequireRole(UserRoles.Admin));
+});
 builder.Services.AddAuthentication().AddCookie(IdentityConstants.ApplicationScheme);
 
 builder.Services.AddIdentityApiEndpoints<User>()
@@ -56,6 +64,8 @@ builder.Services.AddSingleton(typeof(Amazon.S3.IAmazonS3), sp =>
     return new Amazon.S3.AmazonS3Client(creds, s3Config);
 });
 builder.Services.AddScoped<IFileStorage, CloudflareR2Storage>();
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddScoped<OnboardingRequestValidator>();
 
 
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(CastVoteHandler).Assembly));
@@ -111,7 +121,19 @@ app.MapPost("/api/auth/onboarding", async (UserManager<User> userManager, ITenan
         
     return Results.BadRequest(result.Errors);
 })
-.WithTags("Auth");
+.WithTags("Auth")
+.AddEndpointFilter(async (invocationContext, next) =>
+{
+    var request = invocationContext.GetArgument<OnboardingRequest>(2);
+    var validator = invocationContext.HttpContext.RequestServices.GetRequiredService<OnboardingRequestValidator>();
+    var validationResult = await validator.ValidateAsync(request);
+    
+    if (!validationResult.IsValid)
+    {
+        return Results.ValidationProblem(validationResult.ToDictionary());
+    }
+    return await next(invocationContext);
+});
 
 // Units Group
 app.MapGroup("/api/units")
@@ -129,6 +151,28 @@ app.MapGroup("/api/assemblies")
         return Results.Accepted();
     });
 
+// Admin Group
+app.MapGroup("/api/admin")
+    .RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin))
+    .WithTags("Admin")
+    .MapPost("/users/{id}/approve", async (Guid id, IMediator mediator) => 
+    {
+        var success = await mediator.Send(new ApproveUserCommand(id));
+        return success ? Results.Ok() : Results.BadRequest("No se pudo aprobar el usuario.");
+    });
+
+// Listado de usuarios pendientes
+app.MapGroup("/api/admin/users")
+    .RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin))
+    .WithTags("Admin Users")
+    .MapGet("/pending", async (UrbanaKeyDbContext db, ITenantProvider tenantProvider) => 
+    {
+        var tenantId = tenantProvider.GetTenantId();
+        return await db.Users
+            .Where(u => u.TenantId == tenantId && !u.IsActive)
+            .ToListAsync();
+    });
+
 // PQR Group
 var pqrGroup = app.MapGroup("/api/pqr")
     .RequireAuthorization()
@@ -141,16 +185,40 @@ pqrGroup.MapGet("/", async (IMediator mediator, ClaimsPrincipal user) =>
     return Results.Ok(results);
 });
 
-pqrGroup.MapPost("/", async (IMediator mediator, ClaimsPrincipal user, CreatePqrRequest request) => 
+pqrGroup.MapGet("/public", async (IMediator mediator) => 
+{
+    return Results.Ok(await mediator.Send(new GetPublicPqrsQuery()));
+});
+
+pqrGroup.MapPost("/", async (
+    IMediator mediator, 
+    ClaimsPrincipal user, 
+    ITenantProvider tenantProvider,
+    IFileStorage fileStorage,
+    [FromForm] string title, 
+    [FromForm] string description, 
+    [FromForm] Guid unitId, 
+    [FromForm] bool isPublic,
+    IFormFile? file
+    ) => 
 {
     var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    string? attachmentUrl = null;
+
+    if (file != null)
+    {
+        using var stream = file.OpenReadStream();
+        attachmentUrl = await fileStorage.UploadFileAsync(stream, file.FileName, "pqr", tenantProvider.GetTenantId());
+    }
+
+    var request = new CreatePqrRequest(title, description, unitId, isPublic, attachmentUrl);
     var id = await mediator.Send(new CreatePqrCommand(request, userId));
     return Results.Created($"/api/pqr/{id}", new { Id = id });
-});
+}).DisableAntiforgery(); // For file upload handling
 
 // Admin PQR Group
 var adminPqrGroup = app.MapGroup("/api/admin/pqr")
-    .RequireAuthorization() // In real app, require Admin Role policy
+    .RequireAuthorization(UserRoles.Admin)
     .WithTags("Admin PQR");
 
 adminPqrGroup.MapGet("/", async (IMediator mediator) => 
