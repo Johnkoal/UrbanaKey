@@ -9,5 +9,10 @@ public interface IApplicationDbContext
     DbSet<User> Users { get; } 
     DbSet<Assembly> Assemblies { get; }
     DbSet<Vote> Votes { get; }
+    DbSet<Unit> Units { get; }
+    DbSet<ResidentProfile> ResidentProfiles { get; }
+    DbSet<Sanction> Sanctions { get; }
+    DbSet<CommonArea> CommonAreas { get; }
+    DbSet<AmenityBooking> AmenityBookings { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

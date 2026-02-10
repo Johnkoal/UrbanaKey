@@ -2,6 +2,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using UrbanaKey.Api.Middleware;
 using UrbanaKey.Core.Domain;
+using UrbanaKey.Core.Features.Units;
+using UrbanaKey.Core.Features.Residents;
+using UrbanaKey.Core.Features.Sanctions;
+using UrbanaKey.Core.Features.Bookings;
 using UrbanaKey.Core.Features.Assemblies; // For VoteDto, CastVoteCommand
 using UrbanaKey.Core.Interfaces;
 using UrbanaKey.Infrastructure.Persistence;
@@ -67,6 +71,7 @@ builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<OnboardingRequestValidator>();
 builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
 builder.Services.AddHostedService<EmailBackgroundService>();
+builder.Services.AddHostedService<SanctionCleanupService>();
 builder.Services.AddScoped<ITemplateService, FileTemplateService>();
 builder.Services.AddScoped<IPdfService, QuestPdfService>();
 
@@ -147,10 +152,49 @@ app.MapPost("/api/auth/onboarding", async (UserManager<User> userManager, ITenan
 });
 
 // Units Group
-app.MapGroup("/api/units")
-    .RequireAuthorization()
-    .WithTags("Units")
-    .MapGet("/", async (UrbanaKeyDbContext db) => await db.Units.ToListAsync());
+var unitsGroup = app.MapGroup("/api/units")
+    .RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin))
+    .WithTags("Units");
+
+unitsGroup.MapGet("/", async (IMediator mediator) => 
+    Results.Ok(await mediator.Send(new GetUnitsQuery())));
+
+unitsGroup.MapPost("/", async (IMediator mediator, CreateUnitRequest request) => 
+{
+    var id = await mediator.Send(new CreateUnitCommand(request));
+    return Results.Created($"/api/units/{id}", new { Id = id });
+});
+
+unitsGroup.MapPost("/import", async (IMediator mediator, IFormFile file) => 
+{
+    if (file == null || file.Length == 0)
+        return Results.BadRequest("File is empty.");
+
+    using var stream = file.OpenReadStream();
+    var count = await mediator.Send(new ImportUnitsCommand(stream));
+    return Results.Ok(new { ImportedCount = count });
+}).DisableAntiforgery();
+
+// Resident Management Group
+app.MapGroup("/api/admin/residents")
+    .RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin))
+    .WithTags("Residents")
+    .MapPost("/link", async (IMediator mediator, LinkResidentRequest request) => 
+    {
+        var id = await mediator.Send(new LinkResidentCommand(request));
+        return Results.Ok(new { ProfileId = id });
+    });
+
+// Sanctions Group
+app.MapGroup("/api/admin/sanctions")
+    .RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin))
+    .WithTags("Sanctions")
+    .MapPost("/", async (IMediator mediator, CreateSanctionRequest request) => 
+    {
+        var id = await mediator.Send(new CreateSanctionCommand(request));
+        return Results.Created($"/api/sanctions/{id}", new { Id = id });
+    });
+
 
 // Assemblies Group
 app.MapGroup("/api/assemblies")

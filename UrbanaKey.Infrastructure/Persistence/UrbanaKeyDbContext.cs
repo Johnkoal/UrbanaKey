@@ -35,6 +35,8 @@ public class UrbanaKeyDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
     public DbSet<ResidentProfile> ResidentProfiles { get; set; }
     public DbSet<Proxy> Proxies { get; set; }
     public DbSet<EmergencyAlert> EmergencyAlerts { get; set; }
+    public DbSet<CommonArea> CommonAreas { get; set; }
+    public DbSet<AmenityBooking> AmenityBookings { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -58,6 +60,8 @@ public class UrbanaKeyDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
         builder.Entity<ResidentProfile>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
         builder.Entity<Proxy>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
         builder.Entity<EmergencyAlert>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<CommonArea>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<AmenityBooking>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
 
         builder.Entity<Tenant>()
             .HasIndex(t => t.Subdomain)

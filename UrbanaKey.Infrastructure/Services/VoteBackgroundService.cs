@@ -14,13 +14,13 @@ namespace UrbanaKey.Infrastructure.Services;
 
 public class VoteBackgroundService : BackgroundService
 {
-    private readonly VoteChannel _voteChannel; // Needs to expose Reader 
+    private readonly IVoteChannel _voteChannel; // Needs to expose Reader 
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<VoteBackgroundService> _logger;
     private const int BatchSize = 100;
     private readonly TimeSpan _batchInterval = TimeSpan.FromSeconds(2);
 
-    public VoteBackgroundService(VoteChannel voteChannel, IServiceProvider serviceProvider, ILogger<VoteBackgroundService> logger)
+    public VoteBackgroundService(IVoteChannel voteChannel, IServiceProvider serviceProvider, ILogger<VoteBackgroundService> logger)
     {
         _voteChannel = voteChannel;
         _serviceProvider = serviceProvider;

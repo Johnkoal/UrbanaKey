@@ -3,13 +3,14 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using UrbanaKey.Core.Interfaces;
 
 namespace UrbanaKey.Infrastructure.Services;
 
 public class EmailBackgroundService(
     IEmailQueue emailQueue, 
-    IEmailService emailService,
+    IServiceScopeFactory scopeFactory,
     ILogger<EmailBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -21,6 +22,10 @@ public class EmailBackgroundService(
             try
             {
                 var message = await emailQueue.DequeueEmailAsync(ct);
+                
+                using var scope = scopeFactory.CreateScope();
+                var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                
                 await emailService.SendEmailAsync(message);
             }
             catch (OperationCanceledException)
