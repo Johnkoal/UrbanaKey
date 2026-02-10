@@ -13,7 +13,7 @@ public record ApproveUserCommand(Guid UserId) : IRequest<bool>;
 public class ApproveUserHandler(
     UserManager<User> userManager, 
     ITenantProvider tenantProvider,
-    IEmailService emailService) : IRequestHandler<ApproveUserCommand, bool>
+    IEmailQueue emailQueue) : IRequestHandler<ApproveUserCommand, bool>
 {
     public async Task<bool> Handle(ApproveUserCommand request, CancellationToken ct)
     {
@@ -29,7 +29,7 @@ public class ApproveUserHandler(
 
         if (result.Succeeded && !string.IsNullOrEmpty(user.Email))
         {
-            await emailService.SendEmailAsync(new EmailMessage(
+            await emailQueue.EnqueueEmailAsync(new EmailMessage(
                 user.Email,
                 "¡Cuenta Activada en UrbanaKey!",
                 $"Hola {user.FullName}, tu cuenta ha sido aprobada por la administración."

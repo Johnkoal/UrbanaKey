@@ -14,7 +14,6 @@ using Microsoft.AspNetCore.Mvc;
 using UrbanaKey.Core.Features.PQRS;
 using UrbanaKey.Core.Features.Admin;
 using UrbanaKey.Core.Common;
-using UrbanaKey.Core.Interfaces;   
 using FluentValidation;
 using UrbanaKey.Api.Validators; 
 
@@ -66,6 +65,10 @@ builder.Services.AddSingleton(typeof(Amazon.S3.IAmazonS3), sp =>
 builder.Services.AddScoped<IFileStorage, CloudflareR2Storage>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<OnboardingRequestValidator>();
+builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
+builder.Services.AddHostedService<EmailBackgroundService>();
+builder.Services.AddScoped<ITemplateService, FileTemplateService>();
+builder.Services.AddScoped<IPdfService, QuestPdfService>();
 
 
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(CastVoteHandler).Assembly));
@@ -96,6 +99,14 @@ app.MapHub<PanicHub>("/hubs/panic");
 
 // Endpoints
 app.MapGet("/", () => "UrbanaKey Backend Running");
+
+// Assembly Report Endpoint
+app.MapGet("/api/assemblies/{id}/report", async (Guid id, IMediator mediator) => 
+{
+    var pdf = await mediator.Send(new GetAssemblyPdfQuery(id));
+    return Results.File(pdf, "application/pdf", $"Acta_Asamblea_{id}.pdf");
+})
+.RequireAuthorization(policy => policy.RequireRole(UserRoles.Admin));
 
 // Auth Group
 app.MapGroup("/api/auth")
