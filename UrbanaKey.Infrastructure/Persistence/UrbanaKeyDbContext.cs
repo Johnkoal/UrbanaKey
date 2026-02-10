@@ -30,6 +30,11 @@ public class UrbanaKeyDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
     public DbSet<Warning> Warnings { get; set; }
     public DbSet<Sanction> Sanctions { get; set; }
     public DbSet<Vote> Votes { get; set; }
+    public DbSet<Assembly> Assemblies { get; set; }
+    public DbSet<PQRS> PqrsEntries { get; set; }
+    public DbSet<ResidentProfile> ResidentProfiles { get; set; }
+    public DbSet<Proxy> Proxies { get; set; }
+    public DbSet<EmergencyAlert> EmergencyAlerts { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -48,6 +53,11 @@ public class UrbanaKeyDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
         builder.Entity<Warning>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
         builder.Entity<Sanction>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
         builder.Entity<Vote>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<Assembly>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<PQRS>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<ResidentProfile>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<Proxy>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
+        builder.Entity<EmergencyAlert>().HasQueryFilter(e => e.TenantId == _tenantProvider.GetTenantId());
 
         builder.Entity<Tenant>()
             .HasIndex(t => t.Subdomain)
