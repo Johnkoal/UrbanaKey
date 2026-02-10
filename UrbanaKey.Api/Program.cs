@@ -14,6 +14,7 @@ using UrbanaKey.Api.Validators;
 using MediatR;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
+using UrbanaKey.Api.Swagger;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,6 +57,8 @@ builder.Services.AddSwaggerGen(options =>
     var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     options.IncludeXmlComments(xmlPath);
+
+    options.OperationFilter<SpanishIdentityOperationFilter>();
 });
 builder.Services.AddOpenApi();
 
@@ -147,7 +150,12 @@ app.MapHub<AssemblyHub>("/hubs/assembly");
 app.MapHub<PanicHub>("/hubs/panic");
 
 // Endpoints
-app.MapGet("/", () => "UrbanaKey Backend Running");
+app.MapGet("/", () => "UrbanaKey Backend Running")
+    .WithOpenApi(operation => new(operation)
+    {
+        Summary = "Estado del servidor",
+        Description = "Verifica que el servicio backend de UrbanaKey esté activo y funcionando."
+    });
 
 app.MapAuthEndpoints();
 app.MapUnitEndpoints();
