@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="UrbanaKey.Api/UrbanaKey.Api.csproj" />
+  <Project Path="UrbanaKey.Core/UrbanaKey.Core.csproj" />
+  <Project Path="UrbanaKey.Infrastructure/UrbanaKey.Infrastructure.csproj" />
+</Solution>
