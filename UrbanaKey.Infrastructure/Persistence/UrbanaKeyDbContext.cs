@@ -9,7 +9,7 @@ using UrbanaKey.Infrastructure.Persistence.Interceptors;
 
 namespace UrbanaKey.Infrastructure.Persistence;
 
-public class UrbanaKeyDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
+public class UrbanaKeyDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>, IApplicationDbContext
 {
     private readonly ITenantProvider _tenantProvider;
     private readonly AuditableEntityInterceptor _auditableEntityInterceptor;
@@ -31,7 +31,7 @@ public class UrbanaKeyDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
     public DbSet<Sanction> Sanctions { get; set; }
     public DbSet<Vote> Votes { get; set; }
     public DbSet<Assembly> Assemblies { get; set; }
-    public DbSet<PQRS> PqrsEntries { get; set; }
+    public DbSet<PQRS> PQRS { get; set; }
     public DbSet<ResidentProfile> ResidentProfiles { get; set; }
     public DbSet<Proxy> Proxies { get; set; }
     public DbSet<EmergencyAlert> EmergencyAlerts { get; set; }

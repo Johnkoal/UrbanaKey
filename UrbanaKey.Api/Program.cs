@@ -11,6 +11,8 @@ using UrbanaKey.Infrastructure.Persistence.Interceptors;
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Mvc; 
+using UrbanaKey.Core.Features.PQRS;
+using UrbanaKey.Core.Interfaces; 
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +26,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContextPool<UrbanaKeyDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
 );
+builder.Services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<UrbanaKeyDbContext>());
 
 // Identity
 builder.Services.AddAuthorization();
@@ -42,7 +45,7 @@ builder.Services.AddHostedService<VoteBackgroundService>();
 // Storage
 builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions("Storage")); // Maps to ServiceUrl etc if standard format
 // Or manual config:
-builder.Services.AddSingleton<Amazon.S3.IAmazonS3>(sp => 
+builder.Services.AddSingleton(typeof(Amazon.S3.IAmazonS3), sp => 
 {
     var config = sp.GetRequiredService<IConfiguration>();
     var s3Config = new Amazon.S3.AmazonS3Config
@@ -127,10 +130,39 @@ app.MapGroup("/api/assemblies")
     });
 
 // PQR Group
-app.MapGroup("/api/pqr")
+var pqrGroup = app.MapGroup("/api/pqr")
     .RequireAuthorization()
-    .WithTags("PQR")
-    .MapGet("/", () => Results.Ok("PQR List"));
+    .WithTags("PQR");
+
+pqrGroup.MapGet("/", async (IMediator mediator, ClaimsPrincipal user) => 
+{
+    var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var results = await mediator.Send(new GetMyPqrsQuery(userId));
+    return Results.Ok(results);
+});
+
+pqrGroup.MapPost("/", async (IMediator mediator, ClaimsPrincipal user, CreatePqrRequest request) => 
+{
+    var userId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var id = await mediator.Send(new CreatePqrCommand(request, userId));
+    return Results.Created($"/api/pqr/{id}", new { Id = id });
+});
+
+// Admin PQR Group
+var adminPqrGroup = app.MapGroup("/api/admin/pqr")
+    .RequireAuthorization() // In real app, require Admin Role policy
+    .WithTags("Admin PQR");
+
+adminPqrGroup.MapGet("/", async (IMediator mediator) => 
+{
+    return Results.Ok(await mediator.Send(new GetAllPqrsQuery()));
+});
+
+adminPqrGroup.MapPut("/{id}/status", async (IMediator mediator, Guid id, [FromBody] string status) => 
+{
+    var success = await mediator.Send(new UpdatePqrStatusCommand(id, status));
+    return success ? Results.NoContent() : Results.NotFound();
+});
 
 app.Run();
 
